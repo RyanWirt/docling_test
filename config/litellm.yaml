@@ -1,0 +1,9 @@
+model_list:
+  - model_name: os.environ/LITELLM_MODEL
+    litellm_params:
+      model: os.environ/LITELLM_BACKEND_MODEL
+      api_base: http://ollama:11434
+
+general_settings:
+  master_key: os.environ/LITELLM_MASTER_KEY
+  database_url: os.environ/DATABASE_URL

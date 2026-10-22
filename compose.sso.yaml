@@ -1,0 +1,74 @@
+services:
+  docling:
+    ports: !reset []
+
+  litellm:
+    ports: !reset []
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.8.1@sha256:79c623a22abacf3fe6c00a5fb30f5b7843d717b234033b80995891c06116d244
+    command: ["start-dev", "--import-realm"]
+    ports:
+      - "127.0.0.1:8080:8080"
+    environment:
+      KC_HOSTNAME: http://localhost:8080
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:?Generate KEYCLOAK_ADMIN_PASSWORD in .env}
+      OIDC_CLIENT_SECRET: ${OIDC_CLIENT_SECRET:?Generate OIDC_CLIENT_SECRET in .env}
+      KEYCLOAK_TEST_PASSWORD: ${KEYCLOAK_TEST_PASSWORD:?Generate KEYCLOAK_TEST_PASSWORD in .env}
+    volumes:
+      - keycloak-data:/opt/keycloak/data
+      - ./config/docling-realm.json:/opt/keycloak/data/import/docling-realm.json:ro
+
+  docling-sso:
+    image: quay.io/oauth2-proxy/oauth2-proxy:v7.15.5@sha256:8498b0d0ef0a7b29686414000a08aee467f02d0299c9ed1e006a8f33fc017916
+    command: ["--upstream=http://docling:5001/", "--redirect-url=http://localhost:4180/oauth2/callback"]
+    ports:
+      - "127.0.0.1:4180:4180"
+    environment: &oidc-environment
+      OAUTH2_PROXY_PROVIDER: keycloak-oidc
+      OAUTH2_PROXY_HTTP_ADDRESS: 0.0.0.0:4180
+      OAUTH2_PROXY_OIDC_ISSUER_URL: http://localhost:8080/realms/docling
+      OAUTH2_PROXY_SKIP_OIDC_DISCOVERY: "true"
+      OAUTH2_PROXY_LOGIN_URL: http://localhost:8080/realms/docling/protocol/openid-connect/auth
+      OAUTH2_PROXY_REDEEM_URL: http://keycloak:8080/realms/docling/protocol/openid-connect/token
+      OAUTH2_PROXY_OIDC_JWKS_URL: http://keycloak:8080/realms/docling/protocol/openid-connect/certs
+      OAUTH2_PROXY_PROFILE_URL: http://keycloak:8080/realms/docling/protocol/openid-connect/userinfo
+      OAUTH2_PROXY_CLIENT_ID: docling-ui
+      OAUTH2_PROXY_CLIENT_SECRET: ${OIDC_CLIENT_SECRET:?Generate OIDC_CLIENT_SECRET in .env}
+      OAUTH2_PROXY_COOKIE_SECRET: ${OAUTH2_COOKIE_SECRET:?Generate OAUTH2_COOKIE_SECRET in .env}
+      OAUTH2_PROXY_COOKIE_NAME: _docling_sso
+      OAUTH2_PROXY_COOKIE_SECURE: "false"
+      OAUTH2_PROXY_COOKIE_SAMESITE: lax
+      OAUTH2_PROXY_CODE_CHALLENGE_METHOD: S256
+      OAUTH2_PROXY_INSECURE_OIDC_SKIP_NONCE: "false"
+      OAUTH2_PROXY_EMAIL_DOMAINS: example.invalid
+      OAUTH2_PROXY_COOKIE_REFRESH: 2m
+      OAUTH2_PROXY_COOKIE_EXPIRE: 8h
+      OAUTH2_PROXY_UPSTREAM_TIMEOUT: 600s
+      OAUTH2_PROXY_SKIP_PROVIDER_BUTTON: "true"
+      OAUTH2_PROXY_PROXY_WEBSOCKETS: "true"
+    depends_on:
+      docling:
+        condition: service_healthy
+      keycloak:
+        condition: service_started
+    restart: on-failure
+
+  litellm-sso:
+    image: quay.io/oauth2-proxy/oauth2-proxy:v7.15.5@sha256:8498b0d0ef0a7b29686414000a08aee467f02d0299c9ed1e006a8f33fc017916
+    command: ["--upstream=http://litellm:4000/", "--redirect-url=http://localhost:4181/oauth2/callback"]
+    ports:
+      - "127.0.0.1:4181:4180"
+    environment:
+      <<: *oidc-environment
+      OAUTH2_PROXY_COOKIE_NAME: _litellm_sso
+    depends_on:
+      litellm:
+        condition: service_healthy
+      keycloak:
+        condition: service_started
+    restart: on-failure
+
+volumes:
+  keycloak-data:

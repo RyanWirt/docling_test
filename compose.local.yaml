@@ -1,0 +1,72 @@
+services:
+  docling:
+    depends_on:
+      litellm:
+        condition: service_healthy
+
+  ollama:
+    image: ollama/ollama@sha256:2b8eecdb85aa6ea67c381c8ecffec04b2658496cf2821a8f88b0485bdff198e8
+    environment:
+      OLLAMA_NO_CLOUD: "true"
+    volumes:
+      - ollama-data:/root/.ollama
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  model-pull:
+    image: ollama/ollama@sha256:2b8eecdb85aa6ea67c381c8ecffec04b2658496cf2821a8f88b0485bdff198e8
+    entrypoint: ["/bin/sh", "-ec"]
+    command: ['ollama pull "$$OLLAMA_MODEL"']
+    environment:
+      OLLAMA_HOST: http://ollama:11434
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-ibm/granite-docling:258m}
+    depends_on:
+      ollama:
+        condition: service_healthy
+
+  postgres:
+    image: postgres:17-alpine@sha256:eee6c6e1b0894fa4fe0075eb054af9fd1cf39a35321c2d4110626cfe506411fb
+    environment:
+      POSTGRES_DB: litellm
+      POSTGRES_USER: litellm
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Generate POSTGRES_PASSWORD in .env}
+    volumes:
+      - litellm-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U litellm -d litellm"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  litellm:
+    image: ghcr.io/berriai/litellm:main-stable@sha256:7294b90f868c5c38c99b83021c7ba46f9b439e95f8e32964c925c7d2563a03f7
+    command: ["--config", "/app/config.yaml", "--port", "4000"]
+    ports:
+      - "127.0.0.1:${LITELLM_PORT:-4000}:4000"
+    volumes:
+      - ./config/litellm.yaml:/app/config.yaml:ro
+    environment:
+      LITELLM_MASTER_KEY: ${LITELLM_API_KEY:?Generate LITELLM_API_KEY in .env}
+      DATABASE_URL: ${DATABASE_SCHEME:-postgresql}://litellm:${POSTGRES_PASSWORD:?Generate POSTGRES_PASSWORD in .env}@postgres:5432/litellm
+      UI_USERNAME: admin
+      UI_PASSWORD: ${LITELLM_UI_PASSWORD:?Generate LITELLM_UI_PASSWORD in .env}
+      LITELLM_BACKEND_MODEL: ollama_chat/${OLLAMA_MODEL:-ibm/granite-docling:258m}
+      LITELLM_MODEL: ${LITELLM_MODEL:?Set LITELLM_MODEL in .env}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      model-pull:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:4000/health/liveliness', timeout=5)"]
+      interval: 10s
+      timeout: 10s
+      start_period: 90s
+      retries: 20
+
+volumes:
+  ollama-data:
+  litellm-data:
