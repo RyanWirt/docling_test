@@ -22,7 +22,7 @@ docker compose up -d --wait
 
 Open <http://localhost:5001/ui> (or your `DOCLING_PORT`). Upload a small PDF or
 image, set **Pipeline** to **vlm**, and under **Models and presets** select
-**VLM preset** = **litellm** (or **Server default (litellm)**).
+**VLM preset** = **litellm** explicitly.
 Then convert and inspect the Markdown result. The standard pipeline does not
 use this VLM preset; selecting `vlm` is essential. Check your LiteLLM request
 logs to confirm the configured model alias received the page images.
