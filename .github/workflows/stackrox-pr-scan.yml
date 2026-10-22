@@ -84,7 +84,7 @@ jobs:
           FLAGS=(-sSfL --retry 5 --connect-timeout 10 --max-time 120)
           [ -n "${SSL_CERT_FILE:-}" ] && FLAGS+=(--cacert "${SSL_CERT_FILE}")
           [ "${ROX_INSECURE_SKIP_TLS_VERIFY}" = "true" ] && FLAGS+=(-k)
-          if ! curl "${FLAGS[@]}" -H "Authorization: ******" \
+          if ! curl "${FLAGS[@]}" -H "Authorization: Bearer ${ROX_API_TOKEN}" \
               "https://${ROX_CENTRAL_ENDPOINT}/api/cli/download/roxctl-linux" -o roxctl; then
             echo "::warning::Central download failed, falling back to mirror.openshift.com"
             curl -sSfL --retry 3 \
